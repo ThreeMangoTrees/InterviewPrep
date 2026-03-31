@@ -1,0 +1,271 @@
+name: Publish Wiki
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish-wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Clone wiki repo
+        run: |
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki
+
+      - name: Copy docs to wiki
+        run: |
+          cp APIGateway.md wiki/API-Gateway.md
+          cp Docker.md wiki/Docker.md
+          cp MultiDataCenterDesign.md wiki/Multi-Data-Center-Design.md
+          cp Sharding.md wiki/Sharding.md
+          cp leetcode_classification.md wiki/LeetCode-Classification.md
+          cp leetcode_problem_classification_full.md wiki/LeetCode-Problem-Classification-Full.md
+
+      - name: Write Home page
+        run: |
+          cat > wiki/Home.md << 'EOF'
+          # InterviewPrep Wiki
+
+          Welcome to the InterviewPrep wiki — a collection of system design notes, coding concepts, and language cheatsheets.
+
+          ## System Design
+
+          - [API Gateway](API-Gateway)
+          - [Docker](Docker)
+          - [Multi-Data-Center Design](Multi-Data-Center-Design)
+          - [Sharding](Sharding)
+
+          ## LeetCode
+
+          - [LeetCode Classification](LeetCode-Classification)
+          - [LeetCode Problem Classification Full](LeetCode-Problem-Classification-Full)
+
+          ## Language Cheatsheets
+
+          - [C++ Cheatsheet](Cpp-Cheatsheet)
+          - [Java Cheatsheet](Java-Cheatsheet)
+          - [Python Cheatsheet](Python-Cheatsheet)
+          EOF
+
+      - name: Write C++ Cheatsheet
+        run: |
+          cat > wiki/Cpp-Cheatsheet.md << 'CPPEOF'
+          # C++ Cheatsheet
+
+          Quick reference for common data structures and algorithms in C++.
+
+          ## pair
+          ```cpp
+          pair<int, string> p = {1, "hello"};
+          p.first; p.second;
+          auto p2 = make_pair(2, "world");
+          ```
+
+          ## tuple
+          ```cpp
+          tuple<int, string, double> t = {1, "hi", 3.14};
+          get<0>(t); get<1>(t);
+          auto [a, b, c] = t;  // C++17 structured binding
+          ```
+
+          ## array
+          ```cpp
+          array<int, 5> arr = {1, 2, 3, 4, 5};
+          arr[0]; arr.size(); arr.front(); arr.back();
+          ```
+
+          ## vector
+          ```cpp
+          vector<int> v = {1, 2, 3};
+          v.push_back(4); v.pop_back();
+          v.size(); v[0]; v.empty();
+          vector<vector<int>> mat(3, vector<int>(4, 0));
+          ```
+
+          ## map (ordered)
+          ```cpp
+          map<string, int> m;
+          m["apple"] = 1;
+          m.find("apple"); m.count("apple"); m.erase("key");
+          for (auto& [k, v] : m) {}
+          ```
+
+          ## unordered_map
+          ```cpp
+          unordered_map<string, int> um;
+          um["a"] = 1;
+          um.find("a"); um.count("a"); um.erase("a");
+          ```
+
+          ## set (ordered)
+          ```cpp
+          set<int> s = {3, 1, 2};
+          s.insert(4); s.erase(1); s.count(2); s.find(3);
+          ```
+
+          ## unordered_set
+          ```cpp
+          unordered_set<int> us;
+          us.insert(1); us.count(1); us.erase(1);
+          ```
+
+          ## sort
+          ```cpp
+          sort(v.begin(), v.end());
+          sort(v.begin(), v.end(), greater<int>());
+          sort(v.begin(), v.end(), [](int a, int b){ return a > b; });
+          ```
+          CPPEOF
+
+      - name: Write Java Cheatsheet
+        run: |
+          cat > wiki/Java-Cheatsheet.md << 'JAVAEOF'
+          # Java Cheatsheet
+
+          ## pair → SimpleEntry
+          ```java
+          var p = new AbstractMap.SimpleEntry<>(1, "hello");
+          p.getKey(); p.getValue();
+          // Java 16+ record:
+          record Pair<A,B>(A first, B second) {}
+          ```
+
+          ## tuple → record or array
+          ```java
+          record Triple<A,B,C>(A first, B second, C third) {}
+          Triple<Integer,String,Double> t = new Triple<>(1,"hi",3.14);
+          ```
+
+          ## array
+          ```java
+          int[] arr = {1,2,3,4,5};
+          arr.length;
+          Arrays.sort(arr); Arrays.fill(arr, 0);
+          ```
+
+          ## vector → ArrayList
+          ```java
+          ArrayList<Integer> list = new ArrayList<>();
+          list.add(1); list.get(0); list.size(); list.isEmpty();
+          list.remove(Integer.valueOf(1));
+          ```
+
+          ## map → TreeMap (ordered)
+          ```java
+          TreeMap<String,Integer> map = new TreeMap<>();
+          map.put("a",1); map.get("a"); map.containsKey("a"); map.remove("a");
+          ```
+
+          ## unordered_map → HashMap
+          ```java
+          HashMap<String,Integer> map = new HashMap<>();
+          map.put("a",1); map.getOrDefault("b",0); map.containsKey("a");
+          ```
+
+          ## set → TreeSet (ordered)
+          ```java
+          TreeSet<Integer> set = new TreeSet<>();
+          set.add(1); set.contains(1); set.remove(1);
+          ```
+
+          ## unordered_set → HashSet
+          ```java
+          HashSet<Integer> set = new HashSet<>();
+          set.add(1); set.contains(1); set.remove(1);
+          ```
+
+          ## sort
+          ```java
+          Arrays.sort(arr);
+          Arrays.sort(boxed, Collections.reverseOrder());
+          Collections.sort(list, (a,b) -> b - a);
+          Arrays.sort(pairs, (a,b) -> a[1] - b[1]);
+          ```
+          JAVAEOF
+
+      - name: Write Python Cheatsheet
+        run: |
+          cat > wiki/Python-Cheatsheet.md << 'PYEOF'
+          # Python Cheatsheet
+
+          ## pair → tuple
+          ```python
+          p = (1, "hello")
+          p[0]; p[1]
+          a, b = p  # unpacking
+          ```
+
+          ## tuple
+          ```python
+          t = (1, "hi", 3.14)
+          t[0]; len(t)
+          a, b, c = t
+          ```
+
+          ## array → list
+          ```python
+          arr = [1,2,3,4,5]
+          arr[0]; len(arr); arr[-1]
+          mat = [[0]*4 for _ in range(3)]
+          ```
+
+          ## vector → list
+          ```python
+          v = []
+          v.append(1); v.pop(); v[0]; len(v); not v
+          ```
+
+          ## map → dict
+          ```python
+          d = {}
+          d["a"] = 1
+          d.get("b", 0)  # default 0
+          "a" in d; del d["a"]
+          for k, v in d.items(): pass
+          from collections import defaultdict
+          dd = defaultdict(int)
+          ```
+
+          ## unordered_map → dict (same as above)
+          ```python
+          from collections import Counter
+          c = Counter([1,2,2,3])  # {2:2, 1:1, 3:1}
+          ```
+
+          ## set (ordered) → sorted iteration
+          ```python
+          s = {1,2,3}
+          for x in sorted(s): pass
+          from sortedcontainers import SortedList
+          sl = SortedList([3,1,2]); sl.add(4); sl[0]
+          ```
+
+          ## unordered_set → set
+          ```python
+          s = set()
+          s.add(1); 1 in s; s.discard(2); len(s)
+          ```
+
+          ## sort
+          ```python
+          lst.sort()               # in-place ascending
+          lst.sort(reverse=True)   # in-place descending
+          sorted(lst)              # returns new list
+          lst.sort(key=len)
+          pairs.sort(key=lambda x: x[1])
+          ```
+          PYEOF
+
+      - name: Commit and push wiki
+        run: |
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Publish interview prep docs and cheatsheets to wiki" || echo "Nothing to commit"
+          git push
