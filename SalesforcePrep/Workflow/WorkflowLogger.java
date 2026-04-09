@@ -80,10 +80,20 @@ class StateTransition {
 // ============================================================
 
 class TransitionValidator {
+    // Singleton: stateless read-only map, identical for all callers — no benefit to multiple instances.
+    // Using initialization-on-demand holder: lazy, thread-safe, no synchronization overhead after first call.
+    private static class Holder {
+        static final TransitionValidator INSTANCE = new TransitionValidator();
+    }
+
+    public static TransitionValidator getInstance() {
+        return Holder.INSTANCE;
+    }
+
     private final Map<WorkflowState, Set<WorkflowState>> validTransitions =
         new EnumMap<>(WorkflowState.class);
 
-    TransitionValidator() {
+    private TransitionValidator() {
         validTransitions.put(WorkflowState.PENDING,    EnumSet.of(
             WorkflowState.RUNNING, WorkflowState.CANCELLED, WorkflowState.SKIPPED));
         validTransitions.put(WorkflowState.RUNNING,    EnumSet.of(
@@ -119,6 +129,9 @@ interface ITransitionObserver {
 // ============================================================
 // SECTION 5: Logger interface (Strategy pattern) + implementations
 // ============================================================
+
+// LoggerType enum — used by LoggerFactory to select the concrete logger
+enum LoggerType { IN_MEMORY, FILE }
 
 interface ITransitionLogger {
     void log(StateTransition transition);
@@ -231,6 +244,20 @@ class FileLogger implements ITransitionLogger {
             return all;
         } finally {
             lock.unlock();
+        }
+    }
+}
+
+// ---- Factory for ITransitionLogger ----
+// Centralizes logger construction — caller passes a type and optional filepath,
+// and gets back a fully wired ITransitionLogger without knowing the concrete class.
+
+class LoggerFactory {
+    public static ITransitionLogger create(LoggerType type, String... args) throws IOException {
+        switch (type) {
+            case IN_MEMORY: return new InMemoryLogger();
+            case FILE:      return new FileLogger(args.length > 0 ? args[0] : "transitions.log");
+            default: throw new IllegalArgumentException("Unknown logger type: " + type);
         }
     }
 }
@@ -392,6 +419,9 @@ class Workflow {
 // SECTION 8: Concrete Observers
 // ============================================================
 
+// ObserverType enum — used by ObserverFactory to select the concrete observer
+enum ObserverType { ALERT, AUDIT }
+
 // Sends an alert whenever a step fails or is cancelled
 class AlertObserver implements ITransitionObserver {
     @Override
@@ -431,6 +461,20 @@ class AuditObserver implements ITransitionObserver {
     }
 }
 
+// ---- Factory for ITransitionObserver ----
+// Caller passes an ObserverType and gets back a ready-to-use observer
+// without knowing which concrete class implements it.
+
+class ObserverFactory {
+    public static ITransitionObserver create(ObserverType type) {
+        switch (type) {
+            case ALERT: return new AlertObserver();
+            case AUDIT: return new AuditObserver();
+            default: throw new IllegalArgumentException("Unknown observer type: " + type);
+        }
+    }
+}
+
 // ============================================================
 // SECTION 9: WorkflowEngine — coordinates everything
 // ============================================================
@@ -439,7 +483,7 @@ class WorkflowEngine {
     private final Map<String, Workflow> workflows = new HashMap<>();
     private final ITransitionLogger logger;
     private final List<ITransitionObserver> observers = new ArrayList<>();
-    private final TransitionValidator validator = new TransitionValidator();
+    private final TransitionValidator validator = TransitionValidator.getInstance();
     private final ReentrantLock lock = new ReentrantLock();
     private int workflowCounter = 0;
 
@@ -534,11 +578,13 @@ public class WorkflowLogger {
         System.out.println("   Workflow State Transition Logger — Demo");
         System.out.println("================================================\n");
 
-        InMemoryLogger logger = new InMemoryLogger();
+        // Use LoggerFactory — swap IN_MEMORY to FILE without touching engine setup
+        InMemoryLogger logger = (InMemoryLogger) LoggerFactory.create(LoggerType.IN_MEMORY);
         WorkflowEngine engine = new WorkflowEngine(logger);
 
-        engine.addObserver(new AlertObserver());
-        AuditObserver auditObs = new AuditObserver();
+        // Use ObserverFactory — caller only knows ObserverType, not the concrete class
+        engine.addObserver(ObserverFactory.create(ObserverType.ALERT));
+        AuditObserver auditObs = (AuditObserver) ObserverFactory.create(ObserverType.AUDIT);
         engine.addObserver(auditObs);
 
         Map<String, String> noMeta = Collections.emptyMap();

@@ -120,32 +120,36 @@ The workflow's **overall status** is derived from its steps:
 │                            CLASS DIAGRAM                                        │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
-  ┌──────────────────────────┐
-  │   <<enum>>               │
-  │   WorkflowState          │
-  │──────────────────────────│
-  │  PENDING                 │
-  │  RUNNING                 │
-  │  COMPLETED               │
+  ┌──────────────────────────┐   ┌──────────────────────────┐
+  │   <<enum>>               │   │   <<enum>>               │
+  │   WorkflowState          │   │   LoggerType             │
+  │──────────────────────────│   │──────────────────────────│
+  │  PENDING                 │   │  IN_MEMORY               │
+  │  RUNNING                 │   │  FILE                    │
+  │  COMPLETED               │   └──────────────────────────┘
   │  FAILED                  │
-  │  CANCELLED               │
-  │  SKIPPED                 │
-  └──────────────────────────┘
+  │  CANCELLED               │   ┌──────────────────────────┐
+  │  SKIPPED                 │   │   <<enum>>               │
+  └──────────────────────────┘   │   ObserverType           │
+                                 │──────────────────────────│
+                                 │  ALERT                   │
+                                 │  AUDIT                   │
+                                 └──────────────────────────┘
 
-  ┌──────────────────────────┐        ┌──────────────────────────────────────┐
-  │   TransitionValidator    │        │           StateTransition             │
-  │──────────────────────────│        │──────────────────────────────────────│
-  │  -valid_transitions_     │        │  +transition_id : string             │
-  │──────────────────────────│        │  +workflow_id   : string             │
-  │  +isValid(from, to)      │        │  +step_id       : string             │
-  │  +validTargetsFor(from)  │        │  +from_state    : WorkflowState      │
-  └──────────────────────────┘        │  +to_state      : WorkflowState      │
-                                      │  +timestamp     : time_point         │
-                                      │  +triggered_by  : string             │
-                                      │  +metadata      : map<str,str>       │
-                                      │──────────────────────────────────────│
-                                      │  +toString()    : string             │
-                                      └──────────────────────────────────────┘
+  ┌──────────────────────────────┐        ┌──────────────────────────────────────┐
+  │   TransitionValidator        │        │           StateTransition             │
+  │  <<Singleton>>               │        │──────────────────────────────────────│
+  │──────────────────────────────│        │  +transition_id : string             │
+  │  -valid_transitions_         │        │  +workflow_id   : string             │
+  │──────────────────────────────│        │  +step_id       : string             │
+  │  +getInstance() : self       │        │  +from_state    : WorkflowState      │
+  │  +isValid(from, to)          │        │  +to_state      : WorkflowState      │
+  │  +validTargetsFor(from)      │        │  +timestamp     : time_point         │
+  └──────────────────────────────┘        │  +triggered_by  : string             │
+                                          │  +metadata      : map<str,str>       │
+                                          │──────────────────────────────────────│
+                                          │  +toString()    : string             │
+                                          └──────────────────────────────────────┘
 
   ┌──────────────────────────┐    owns    ┌──────────────────────────────────┐
   │       Workflow           │────────────│        WorkflowStep              │
@@ -154,7 +158,7 @@ The workflow's **overall status** is derived from its steps:
   │  -workflow_name_         │            │  -step_name_                     │
   │  -steps_                 │            │  -workflow_id_                   │
   │──────────────────────────│            │  -current_state_                 │
-  │  +addStep(name)          │            │  -history_  : List<Transition>   │
+  │  +addStep(name)  ←── Factory Method   │  -history_  : List<Transition>   │
   │  +getStep(step_id)       │            │──────────────────────────────────│
   │  +getOverallStatus()     │            │  +transition(to, validator, ...)  │
   │  +printStatus()          │            │  +getCurrentState()              │
@@ -179,7 +183,17 @@ The workflow's **overall status** is derived from its steps:
   │  -all_transitions_ │    │  -step_history_      │
   │────────────────────│    │─────────────────────│
   │  +exportToCSV()    │    │  writes on every log │
-  └────────────────────┘    └─────────────────────┘
+  └──────────┬─────────┘    └──────────┬──────────┘
+             │                         │
+             └────────────┬────────────┘
+                          │ creates
+                ┌─────────▼──────────────┐
+                │     LoggerFactory      │   ← Factory Pattern
+                │────────────────────────│
+                │  +create(LoggerType,   │
+                │          ...args)      │
+                │  : ITransitionLogger   │
+                └────────────────────────┘
 
   ┌──────────────────────────────────────────────────────────┐
   │            <<interface>> ITransitionObserver             │
@@ -194,7 +208,16 @@ The workflow's **overall status** is derived from its steps:
   │────────────────────│    │─────────────────────│
   │  alerts on FAILED  │    │  immutable audit log │
   │  and CANCELLED     │    │  in memory           │
-  └────────────────────┘    └─────────────────────┘
+  └──────────┬─────────┘    └──────────┬──────────┘
+             │                         │
+             └────────────┬────────────┘
+                          │ creates
+                ┌─────────▼──────────────┐
+                │    ObserverFactory     │   ← Factory Pattern
+                │────────────────────────│
+                │  +create(ObserverType) │
+                │  : ITransitionObserver │
+                └────────────────────────┘
 
   ┌──────────────────────────────────────────────────────────────────────┐
   │                          WorkflowEngine                              │
@@ -202,9 +225,9 @@ The workflow's **overall status** is derived from its steps:
   │  -workflows_    : map<id, Workflow>                                  │
   │  -logger_       : ITransitionLogger        ← strategy pattern       │
   │  -observers_    : List<ITransitionObserver> ← observer pattern      │
-  │  -validator_    : TransitionValidator                                │
+  │  -validator_    : TransitionValidator       ← singleton             │
   │──────────────────────────────────────────────────────────────────────│
-  │  +createWorkflow(name)                                               │
+  │  +createWorkflow(name)  ← Factory Method                            │
   │  +transitionStep(wf_id, step_id, new_state, triggered_by, metadata) │
   │  +addObserver(observer)                                              │
   │  +printStepHistory(step_id)                                          │
@@ -231,6 +254,38 @@ The workflow's **overall status** is derived from its steps:
 ### Template Method / Separation of Concerns
 **Where:** `WorkflowEngine.transitionStep()` orchestrates: validate → transition → log → notify.
 **Why:** Each responsibility is isolated. The step does not know about the logger. The logger does not know about observers.
+
+### Singleton Pattern
+**Where:** `TransitionValidator` is a Singleton.
+**Why:** The valid-transition adjacency map is purely read-only and identical for every caller. There is no benefit to multiple instances — they would all hold the same data. Using a Singleton eliminates redundant construction and makes the shared nature explicit.
+- **Java:** Initialization-on-demand holder idiom — lazy, thread-safe, zero synchronization cost after first call.
+- **C++:** Local static (`static TransitionValidator instance`) — thread-safe by the C++11 magic-statics guarantee.
+
+### Factory Pattern
+**Where:** `LoggerFactory` and `ObserverFactory`.
+
+**`LoggerFactory`**
+```java
+// Java
+ITransitionLogger logger = LoggerFactory.create(LoggerType.IN_MEMORY);
+ITransitionLogger logger = LoggerFactory.create(LoggerType.FILE, "app.log");
+```
+```cpp
+// C++
+auto logger = LoggerFactory::create(LoggerType::IN_MEMORY);
+auto logger = LoggerFactory::create(LoggerType::FILE, "app.log");
+```
+**Why:** `InMemoryLogger` and `FileLogger` have different constructor signatures — the file logger requires a filepath, the in-memory logger does not. Without a factory, the caller must know which concrete class to instantiate and how. The factory hides that detail: the caller only provides a `LoggerType` enum value and gets back an `ITransitionLogger`.
+
+**`ObserverFactory`**
+```java
+// Java
+engine.addObserver(ObserverFactory.create(ObserverType.ALERT));
+engine.addObserver(ObserverFactory.create(ObserverType.AUDIT));
+```
+**Why:** Caller depends only on `ITransitionObserver`, not on `AlertObserver` or `AuditObserver`. New observer types can be added by extending the enum and adding one case to the factory — no changes to `WorkflowEngine` or call sites.
+
+**`Workflow.addStep()` and `WorkflowEngine.createWorkflow()`** are **embedded Factory Methods** — they construct `WorkflowStep` and `Workflow` objects with auto-generated IDs internally, hiding that ID-generation logic from the caller. These were present from the original design.
 
 ---
 
@@ -308,12 +363,29 @@ For a production system, use an async worker queue (e.g., bounded `std::queue` w
 
 ### Decision 4: Transition validation — centralized validator vs. per-state objects
 
+
+
 **Option A:** A single `TransitionValidator` with a static adjacency map.
 **Option B:** Each state is an object with a `canTransitionTo()` method (GoF State pattern fully).
 
 **Choice:** Centralized validator. Adding a new state means editing one map, not creating a new class.
 
 **Tradeoff:** Less OOP purity, but significantly simpler to maintain when the state set is small and stable.
+
+---
+
+### Decision 5: Factory — where to place construction logic
+
+**Problem:** `InMemoryLogger` and `FileLogger` have different constructor signatures. `AlertObserver` and `AuditObserver` are concrete classes the caller should not need to know about.
+
+**Option A:** Caller calls `new InMemoryLogger()` / `new FileLogger("path")` directly.
+**Option B:** Centralize construction in `LoggerFactory` and `ObserverFactory`.
+
+**Choice:** Factory classes with type enums.
+
+**Tradeoff:**
+- Adds two small classes and two enums.
+- In return: call sites depend only on interfaces (`ITransitionLogger`, `ITransitionObserver`) and type tokens (`LoggerType`, `ObserverType`). Adding a new logger or observer requires changing only the factory, never the engine or call sites. This strictly follows the Open/Closed Principle.
 
 ---
 
@@ -350,6 +422,7 @@ No changes to `WorkflowStep`, `Workflow`, or `WorkflowEngine`.
 
 ### Add a new logger backend (e.g., PostgreSQL)
 
+**Step 1** — implement the interface:
 ```cpp
 class PostgresLogger : public ITransitionLogger {
     void log(const StateTransition& t) override {
@@ -357,9 +430,21 @@ class PostgresLogger : public ITransitionLogger {
     }
     // implement getHistory(), getAllHistory()
 };
+```
 
-// Usage:
-auto logger = std::make_shared<PostgresLogger>(connection_string);
+**Step 2** — add it to `LoggerFactory`:
+```cpp
+// Add to LoggerType enum:
+enum class LoggerType { IN_MEMORY, FILE, POSTGRES };
+
+// Add one case in LoggerFactory::create():
+case LoggerType::POSTGRES:
+    return std::make_shared<PostgresLogger>(args[0]); // connection string
+```
+
+**Step 3** — use it via the factory (no other changes):
+```cpp
+auto logger = LoggerFactory::create(LoggerType::POSTGRES, "host=localhost dbname=wf");
 WorkflowEngine engine(logger);
 ```
 
@@ -367,6 +452,7 @@ WorkflowEngine engine(logger);
 
 ### Add a new observer (e.g., Metrics counter)
 
+**Step 1** — implement the interface:
 ```cpp
 class MetricsObserver : public ITransitionObserver {
     void onTransition(const StateTransition& t) override {
@@ -375,8 +461,21 @@ class MetricsObserver : public ITransitionObserver {
             metrics_counter_.increment("transitions.failures");
     }
 };
+```
 
-engine.addObserver(std::make_shared<MetricsObserver>(counter));
+**Step 2** — add it to `ObserverFactory`:
+```cpp
+// Add to ObserverType enum:
+enum class ObserverType { ALERT, AUDIT, METRICS };
+
+// Add one case in ObserverFactory::create():
+case ObserverType::METRICS:
+    return std::make_shared<MetricsObserver>();
+```
+
+**Step 3** — use it via the factory (no other changes):
+```cpp
+engine.addObserver(ObserverFactory::create(ObserverType::METRICS));
 ```
 
 ---
